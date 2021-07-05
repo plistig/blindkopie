@@ -4,17 +4,15 @@ use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 
 use anyhow::Result;
-use chrono::{DateTime, Utc, TimeZone, NaiveDateTime};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::{de, ser};
 use thiserror::Error;
-
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Illegal UNIX timestamp: {0}")]
     CannotConvertToTimestamp(i64),
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Timestamp {
@@ -46,8 +44,7 @@ impl PartialOrd for Timestamp {
     }
 }
 
-impl Eq for Timestamp {
-}
+impl Eq for Timestamp {}
 
 impl PartialEq for Timestamp {
     fn eq(&self, other: &Self) -> bool {
@@ -76,7 +73,8 @@ impl TryFrom<i64> for Timestamp {
     type Error = Error;
 
     fn try_from(unix_ts: i64) -> Result<Self, Self::Error> {
-        let utc = NaiveDateTime::from_timestamp_opt(unix_ts, 0).ok_or(Error::CannotConvertToTimestamp(unix_ts))?;
+        let utc = NaiveDateTime::from_timestamp_opt(unix_ts, 0)
+            .ok_or(Error::CannotConvertToTimestamp(unix_ts))?;
         let utc = DateTime::from_utc(utc, Utc);
         Ok(Self { unix_ts, utc })
     }
@@ -116,10 +114,12 @@ impl<'de> de::Deserialize<'de> for Timestamp {
 }
 
 impl ser::Serialize for Timestamp {
-    fn serialize<S>(&self, serializer: S) ->
-        Result<<S as ser::Serializer>::Ok, <S as ser::Serializer>::Error>
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> Result<<S as ser::Serializer>::Ok, <S as ser::Serializer>::Error>
     where
-        S: ser::Serializer
+        S: ser::Serializer,
     {
         serializer.serialize_i64(self.unix_ts)
     }

@@ -10,13 +10,17 @@ use memfd::MemfdOptions;
 use memmap::{Mmap, MmapOptions};
 use nix::unistd::getpid;
 use scopeguard::defer;
-use tokio::try_join;
 use tokio::process::Command;
+use tokio::try_join;
 
-use crate::networking::{with_timeout_and_cancellation_token, await_with_cancellation_token, OK, sleep_with_cancellation_token};
-use crate::reddit::{upload_image_preview, submit_image, fetch_title, get_uploaded_image_url, ImagePreview};
-use crate::state::{State, WorkInner, WorkOutcome, StateChange};
-
+use crate::networking::{
+    await_with_cancellation_token, sleep_with_cancellation_token,
+    with_timeout_and_cancellation_token, OK,
+};
+use crate::reddit::{
+    fetch_title, get_uploaded_image_url, submit_image, upload_image_preview, ImagePreview,
+};
+use crate::state::{State, StateChange, WorkInner, WorkOutcome};
 
 struct Screenshot {
     text: String,
@@ -46,29 +50,42 @@ async fn screenshot(source_url: &str, state: &State) -> Result<Screenshot> {
 
     with_timeout_and_cancellation_token(state, 45, async {
         Command::new("/usr/bin/env")
-            .arg("./env/bin/python").arg("./readermode_screenshot.py").arg(source_url).arg(&png_path).arg(txt_path)
+            .arg("./env/bin/python")
+            .arg("./readermode_screenshot.py")
+            .arg(source_url)
+            .arg(&png_path)
+            .arg(txt_path)
             .env("VIRTUAL_ENV", canonicalize("env")?)
             .stdin(Stdio::null())
             .spawn()?
-            .wait().await?.exit_ok()?;
+            .wait()
+            .await?
+            .exit_ok()?;
         OK
-    }).await?;
+    })
+    .await?;
 
     with_timeout_and_cancellation_token(state, 15, async {
         Command::new("/usr/bin/env")
-            .arg("convert").arg(png_path).arg("-colors").arg("255").arg(png_index_path)
+            .arg("convert")
+            .arg(png_path)
+            .arg("-colors")
+            .arg("255")
+            .arg(png_index_path)
             .stdin(Stdio::null())
             .spawn()?
-            .wait().await?.exit_ok()?;
+            .wait()
+            .await?
+            .exit_ok()?;
         OK
-    }).await?;
+    })
+    .await?;
 
     let text = std::str::from_utf8(&unsafe { MmapOptions::new().map(&txt_file) }?)?.to_owned();
     let png = unsafe { MmapOptions::new().map(&png_index_file) }?;
 
     Ok(Screenshot { text, png })
 }
-
 
 #[derive(Debug, Clone)]
 struct SubmittedScreenshot {
@@ -83,14 +100,20 @@ async fn submit(source_url: &str, state: &State) -> Result<SubmittedScreenshot> 
         fetch_title(state, source_url),
     )?;
 
-    let ImagePreview { preview_url, websocket_url } = upload_image_preview(state, png, "screenshot.png", mime::IMAGE_PNG).await?;
+    let ImagePreview {
+        preview_url,
+        websocket_url,
+    } = upload_image_preview(state, png, "screenshot.png", mime::IMAGE_PNG).await?;
     let sr = state.client_data.read().await.sr_to_post_to.clone();
     let post_url = submit_image(state, &sr, &title, &preview_url, websocket_url).await?;
     let image_url = get_uploaded_image_url(state, &post_url).await?;
 
-    Ok(SubmittedScreenshot { post_url, image_url, text })
+    Ok(SubmittedScreenshot {
+        post_url,
+        image_url,
+        text,
+    })
 }
-
 
 pub async fn screenshot_loop(state: Arc<State>) -> Result<()> {
     let state: &State = &state;
@@ -126,28 +149,43 @@ pub async fn screenshot_loop(state: Arc<State>) -> Result<()> {
             };
             info!("Will screenshot: {:?}", &work.meta);
 
-            let result = with_timeout_and_cancellation_token(state, 60, submit(&work.meta.url, &state)).await;
+            let result =
+                with_timeout_and_cancellation_token(state, 60, submit(&work.meta.url, &state))
+                    .await;
             let do_comment = {
                 let mut data = work.data.write().await;
                 let data: &mut WorkInner = &mut data;
 
                 match result {
                     Ok(submitted_screenshot) => {
-                        info!("Screenshot success: {:?} => {:?}", &work.meta.url, &submitted_screenshot.image_url);
-                        state.log_changes(&[
-                            StateChange::ScreenshotOutcome(Cow::Borrowed(&work.meta), Some(Cow::Borrowed(&submitted_screenshot.image_url))),
-                            StateChange::TextOutcome(Cow::Borrowed(&work.meta), Some(Cow::Borrowed(&submitted_screenshot.text))),
-                        ]).await?;
+                        info!(
+                            "Screenshot success: {:?} => {:?}",
+                            &work.meta.url, &submitted_screenshot.image_url
+                        );
+                        state
+                            .log_changes(&[
+                                StateChange::ScreenshotOutcome(
+                                    Cow::Borrowed(&work.meta),
+                                    Some(Cow::Borrowed(&submitted_screenshot.image_url)),
+                                ),
+                                StateChange::TextOutcome(
+                                    Cow::Borrowed(&work.meta),
+                                    Some(Cow::Borrowed(&submitted_screenshot.text)),
+                                ),
+                            ])
+                            .await?;
                         data.screenshot = WorkOutcome::Success(submitted_screenshot.image_url);
                         data.text = WorkOutcome::Success(submitted_screenshot.text);
                     }
                     Err(err) => {
                         dbg!(err);
                         warn!("Screenshot failure: {:?}", &work.meta.url);
-                        state.log_changes(&[
-                            StateChange::ScreenshotOutcome(Cow::Borrowed(&work.meta), None),
-                            StateChange::TextOutcome(Cow::Borrowed(&work.meta), None),
-                        ]).await?;
+                        state
+                            .log_changes(&[
+                                StateChange::ScreenshotOutcome(Cow::Borrowed(&work.meta), None),
+                                StateChange::TextOutcome(Cow::Borrowed(&work.meta), None),
+                            ])
+                            .await?;
                         data.screenshot = WorkOutcome::Failure;
                         data.text = WorkOutcome::Failure;
                     }

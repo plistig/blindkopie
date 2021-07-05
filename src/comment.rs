@@ -4,9 +4,8 @@ use anyhow::Result;
 use log::{info, warn};
 use scopeguard::defer;
 
-use crate::networking::{sleep_with_cancellation_token, await_with_cancellation_token};
+use crate::networking::{await_with_cancellation_token, sleep_with_cancellation_token};
 use crate::state::{State, WorkInner, WorkOutcome};
-
 
 pub async fn comment_loop(state: Arc<State>) -> Result<()> {
     let state: &State = &state;

@@ -17,11 +17,11 @@
 #![feature(exit_status_error)]
 #![feature(try_trait_v2)]
 
-use anyhow::{Result, Context, bail};
+use anyhow::{bail, Context, Result};
 use clap::clap_app;
 use log::{info, warn};
-use tokio::runtime::Builder;
 use tokio::join;
+use tokio::runtime::Builder;
 
 mod comment;
 mod google_cache;
@@ -32,7 +32,6 @@ mod screenshot;
 mod state;
 mod timestamp;
 mod wikiwix;
-
 
 fn main() -> Result<()> {
     pretty_env_logger::init();
@@ -47,21 +46,25 @@ fn main() -> Result<()> {
         (@subcommand init =>
             (about: "Setup basic service information")
         )
-    ).get_matches();
+    )
+    .get_matches();
     let (subcommand, _) = matches.subcommand();
     if subcommand.is_empty() {
         bail!("No subcommand provided.");
     }
 
-    Builder::new_multi_thread().enable_all().build().context("Setup Tokio runtime")?.block_on(async {
-        match subcommand {
-            "init" => state::subcommand_init().await,
-            "run" => subcommand_run().await,
-            _ => bail!("Impossible"),
-        }
-    })
+    Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("Setup Tokio runtime")?
+        .block_on(async {
+            match subcommand {
+                "init" => state::subcommand_init().await,
+                "run" => subcommand_run().await,
+                _ => bail!("Impossible"),
+            }
+        })
 }
-
 
 async fn subcommand_run() -> Result<()> {
     info!("Starting up …");
